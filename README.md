@@ -185,10 +185,17 @@ HOST=0.0.0.0
 PORT=8051
 TRANSPORT=sse
 
-# OpenAI API Configuration
+# LLM Provider Configuration
+LLM_PROVIDER=openai  # openai, groq, ollama, lmstudio, gemini
 OPENAI_API_KEY=your_openai_api_key
+OPENAI_BASE_URL=
+GROQ_API_KEY=
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+OLLAMA_BASE_URL=http://localhost:11434/v1
+LMSTUDIO_BASE_URL=http://localhost:1234/v1
+GEMINI_API_KEY=
 
-# LLM for summaries and contextual embeddings
+# Model used for summaries and contextual embeddings
 MODEL_CHOICE=gpt-4.1-nano
 
 # RAG Strategies (set to "true" or "false", default to "false")
@@ -363,6 +370,7 @@ Add this server to your MCP configuration for Claude Desktop, Windsurf, or any o
       "args": ["path/to/crawl4ai-mcp/src/crawl4ai_mcp.py"],
       "env": {
         "TRANSPORT": "stdio",
+        "LLM_PROVIDER": "openai",
         "OPENAI_API_KEY": "your_openai_api_key",
         "SUPABASE_URL": "your_supabase_url",
         "SUPABASE_SERVICE_KEY": "your_supabase_service_key",
@@ -385,7 +393,8 @@ Add this server to your MCP configuration for Claude Desktop, Windsurf, or any o
       "command": "docker",
       "args": ["run", "--rm", "-i", 
                "-e", "TRANSPORT", 
-               "-e", "OPENAI_API_KEY", 
+               "-e", "LLM_PROVIDER",
+               "-e", "OPENAI_API_KEY",
                "-e", "SUPABASE_URL", 
                "-e", "SUPABASE_SERVICE_KEY",
                "-e", "USE_KNOWLEDGE_GRAPH",
@@ -395,6 +404,7 @@ Add this server to your MCP configuration for Claude Desktop, Windsurf, or any o
                "mcp/crawl4ai"],
       "env": {
         "TRANSPORT": "stdio",
+        "LLM_PROVIDER": "openai",
         "OPENAI_API_KEY": "your_openai_api_key",
         "SUPABASE_URL": "your_supabase_url",
         "SUPABASE_SERVICE_KEY": "your_supabase_service_key",

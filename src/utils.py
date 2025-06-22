@@ -8,11 +8,29 @@ import json
 from supabase import create_client, Client
 from urllib.parse import urlparse
 import openai
+
+try:
+    import google.generativeai as genai
+except Exception:  # noqa: PIE786
+    genai = None
 import re
 import time
 
 # Load OpenAI API key for embeddings
 openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.base_url = os.getenv("OPENAI_BASE_URL", openai.base_url)
+
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
+
+if LLM_PROVIDER == "groq":
+    openai.base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    openai.api_key = os.getenv("GROQ_API_KEY")
+elif LLM_PROVIDER == "ollama":
+    openai.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+    openai.api_key = os.getenv("OLLAMA_API_KEY", "ollama")
+elif LLM_PROVIDER == "lmstudio":
+    openai.base_url = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+    openai.api_key = os.getenv("LMSTUDIO_API_KEY", "lmstudio")
 
 def get_supabase_client() -> Client:
     """
@@ -99,6 +117,33 @@ def create_embedding(text: str) -> List[float]:
         # Return empty embedding if there's an error
         return [0.0] * 1536
 
+
+def llm_chat_completion(
+    messages: List[Dict[str, str]],
+    model: str,
+    temperature: float = 0.3,
+    max_tokens: int = 150,
+) -> str:
+    """Call the configured LLM provider and return the response text."""
+    if LLM_PROVIDER in {"openai", "groq", "ollama", "lmstudio"}:
+        response = openai.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content.strip()
+    if LLM_PROVIDER == "gemini":
+        if genai is None:
+            raise RuntimeError("google-generativeai is not installed")
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model_name = model or "gemini-pro"
+        result = genai.GenerativeModel(model_name).generate_content(
+            messages[-1]["content"]
+        )
+        return result.text.strip()
+    raise ValueError(f"Unsupported LLM_PROVIDER: {LLM_PROVIDER}")
+
 def generate_contextual_embedding(full_document: str, chunk: str) -> Tuple[str, bool]:
     """
     Generate contextual information for a chunk within a document to improve retrieval.
@@ -125,19 +170,16 @@ Here is the chunk we want to situate within the whole document
 </chunk> 
 Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else."""
 
-        # Call the OpenAI API to generate contextual information
-        response = openai.chat.completions.create(
-            model=model_choice,
-            messages=[
+        # Call the configured LLM to generate contextual information
+        context = llm_chat_completion(
+            [
                 {"role": "system", "content": "You are a helpful assistant that provides concise contextual information."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
+            model=model_choice,
             temperature=0.3,
-            max_tokens=200
+            max_tokens=200,
         )
-        
-        # Extract the generated context
-        context = response.choices[0].message.content.strip()
         
         # Combine the context with the original chunk
         contextual_text = f"{context}\n---\n{chunk}"
@@ -468,17 +510,15 @@ Based on the code example and its surrounding context, provide a concise summary
 """
     
     try:
-        response = openai.chat.completions.create(
-            model=model_choice,
-            messages=[
+        return llm_chat_completion(
+            [
                 {"role": "system", "content": "You are a helpful assistant that provides concise code example summaries."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
+            model=model_choice,
             temperature=0.3,
-            max_tokens=100
+            max_tokens=100,
         )
-        
-        return response.choices[0].message.content.strip()
     
     except Exception as e:
         print(f"Error generating code example summary: {e}")
@@ -662,19 +702,15 @@ The above content is from the documentation for '{source_id}'. Please provide a 
 """
     
     try:
-        # Call the OpenAI API to generate the summary
-        response = openai.chat.completions.create(
-            model=model_choice,
-            messages=[
+        summary = llm_chat_completion(
+            [
                 {"role": "system", "content": "You are a helpful assistant that provides concise library/tool/framework summaries."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
+            model=model_choice,
             temperature=0.3,
-            max_tokens=150
+            max_tokens=150,
         )
-        
-        # Extract the generated summary
-        summary = response.choices[0].message.content.strip()
         
         # Ensure the summary is not too long
         if len(summary) > max_length:
