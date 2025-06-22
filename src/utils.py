@@ -32,6 +32,10 @@ elif LLM_PROVIDER == "lmstudio":
     openai.base_url = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
     openai.api_key = os.getenv("LMSTUDIO_API_KEY", "lmstudio")
 
+# Validate API key for providers that require it
+if LLM_PROVIDER in ["openai", "groq", "gemini"] and not openai.api_key:
+    raise ValueError(f"API key required for {LLM_PROVIDER} provider")
+
 def get_supabase_client() -> Client:
     """
     Get a Supabase client with the URL and key from environment variables.
