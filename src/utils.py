@@ -1,6 +1,7 @@
 """
 Utility functions for the Crawl4AI MCP server.
 """
+
 import os
 import concurrent.futures
 from typing import List, Dict, Any, Optional, Tuple
@@ -11,9 +12,8 @@ import openai
 
 try:
     import google.generativeai as genai
-except Exception:  # noqa: PIE786
+except ImportError:
     genai = None
-import re
 import time
 
 # Load OpenAI API key for embeddings
@@ -22,213 +22,295 @@ openai.base_url = os.getenv("OPENAI_BASE_URL", openai.base_url)
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
 
+
+def _require_api_key(key: Optional[str], env_name: str) -> str:
+    if not key:
+        raise EnvironmentError(
+            f"{env_name} environment variable must be set for LLM_PROVIDER={LLM_PROVIDER}"
+        )
+    return key
+
+
 if LLM_PROVIDER == "groq":
     openai.base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-    openai.api_key = os.getenv("GROQ_API_KEY")
+    openai.api_key = _require_api_key(os.getenv("GROQ_API_KEY"), "GROQ_API_KEY")
 elif LLM_PROVIDER == "ollama":
     openai.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-    openai.api_key = os.getenv("OLLAMA_API_KEY", "ollama")
+    openai.api_key = _require_api_key(
+        os.getenv("OLLAMA_API_KEY", "ollama"), "OLLAMA_API_KEY"
+    )
 elif LLM_PROVIDER == "lmstudio":
     openai.base_url = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
-    openai.api_key = os.getenv("LMSTUDIO_API_KEY", "lmstudio")
+    openai.api_key = _require_api_key(
+        os.getenv("LMSTUDIO_API_KEY", "lmstudio"), "LMSTUDIO_API_KEY"
+    )
+elif LLM_PROVIDER == "openai":
+    openai.base_url = os.getenv("OPENAI_BASE_URL", openai.base_url)
+    openai.api_key = _require_api_key(os.getenv("OPENAI_API_KEY"), "OPENAI_API_KEY")
 
-# Validate API key for providers that require it
-if LLM_PROVIDER in ["openai", "groq", "gemini"] and not openai.api_key:
-    raise ValueError(f"API key required for {LLM_PROVIDER} provider")
 
-def get_supabase_client() -> Client:
-    """
-    Get a Supabase client with the URL and key from environment variables.
-    
-    Returns:
-        Supabase client instance
-    """
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_KEY")
-    
-    if not url or not key:
-        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in environment variables")
-    
-    return create_client(url, key)
 
-def create_embeddings_batch(texts: List[str]) -> List[List[float]]:
-    """
-    Create embeddings for multiple texts in a single API call.
-    
-    Args:
-        texts: List of texts to create embeddings for
-        
-    Returns:
-        List of embeddings (each embedding is a list of floats)
-    """
-    if not texts:
-        return []
-    
-    max_retries = 3
-    retry_delay = 1.0  # Start with 1 second delay
-    
-    for retry in range(max_retries):
-        try:
-            response = openai.embeddings.create(
-                model="text-embedding-3-small", # Hardcoding embedding model for now, will change this later to be more dynamic
-                input=texts
-            )
-            return [item.embedding for item in response.data]
-        except Exception as e:
-            if retry < max_retries - 1:
-                print(f"Error creating batch embeddings (attempt {retry + 1}/{max_retries}): {e}")
-                print(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-            else:
-                print(f"Failed to create batch embeddings after {max_retries} attempts: {e}")
-                # Try creating embeddings one by one as fallback
-                print("Attempting to create embeddings individually...")
-                embeddings = []
-                successful_count = 0
-                
-                for i, text in enumerate(texts):
-                    try:
-                        individual_response = openai.embeddings.create(
-                            model="text-embedding-3-small",
-                            input=[text]
+
+        raise ValueError(
+            "SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in environment variables"
+        )
+
+
+
+
+
+
+                model="text-embedding-3-small",  # Hardcoding embedding model for now, will change this later to be more dynamic
+                input=texts,
+                print(
+                    f"Error creating batch embeddings (attempt {retry + 1}/{max_retries}): {e}"
+                )
+                print(
+                    f"Failed to create batch embeddings after {max_retries} attempts: {e}"
+                )
+
+                            model="text-embedding-3-small", input=[text]
+                        print(
+                            f"Failed to create embedding for text {i}: {individual_error}"
                         )
-                        embeddings.append(individual_response.data[0].embedding)
-                        successful_count += 1
-                    except Exception as individual_error:
-                        print(f"Failed to create embedding for text {i}: {individual_error}")
-                        # Add zero embedding as fallback
-                        embeddings.append([0.0] * 1536)
-                
-                print(f"Successfully created {successful_count}/{len(texts)} embeddings individually")
-                return embeddings
 
-def create_embedding(text: str) -> List[float]:
-    """
-    Create an embedding for a single text using OpenAI's API.
-    
+                print(
+                    f"Successfully created {successful_count}/{len(texts)} embeddings individually"
+                )
+
+
+
+
+        gemini_key = _require_api_key(os.getenv("GEMINI_API_KEY"), "GEMINI_API_KEY")
+        genai.configure(api_key=gemini_key)
+
+
     Args:
-        text: Text to create an embedding for
-        
-    Returns:
-        List of floats representing the embedding
+
+
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that provides concise contextual information.",
+                },
+
+
+
+        print(
+            f"Error generating contextual embedding: {e}. Using original chunk instead."
+        )
+
+
+
+
+    client: Client,
+    urls: List[str],
+    contents: List[str],
+    batch_size: int = 20,
+
+
+
+    use_contextual_embeddings = (
+        os.getenv("USE_CONTEXTUAL_EMBEDDINGS", "false") == "true"
+    )
+
+
+
+
+                future_to_idx = {
+                    executor.submit(process_chunk_with_context, arg): idx
+                    for idx, arg in enumerate(process_args)
+                }
+
+
+                print(
+                    f"Warning: Expected {len(batch_contents)} results but got {len(contextual_contents)}"
+                )
+
+
+
+
+                "metadata": {"chunk_size": chunk_size, **batch_metadatas[j]},
+                "embedding": batch_embeddings[
+                    j
+                ],  # Use embedding from contextual content
+
+
+
+                    print(
+                        f"Error inserting batch into Supabase (attempt {retry + 1}/{max_retries}): {e}"
+                    )
+                            print(
+                                f"Failed to insert individual record for URL {record['url']}: {individual_error}"
+                            )
+
+                        print(
+                            f"Successfully inserted {successful_inserts}/{len(batch_data)} records individually"
+                        )
+
+    client: Client,
+    query: str,
+    match_count: int = 10,
+    filter_metadata: Optional[Dict[str, Any]] = None,
+
+
     """
-    try:
-        embeddings = create_embeddings_batch([text])
-        return embeddings[0] if embeddings else [0.0] * 1536
-    except Exception as e:
-        print(f"Error creating embedding: {e}")
-        # Return empty embedding if there's an error
-        return [0.0] * 1536
+
+        params = {"query_embedding": query_embedding, "match_count": match_count}
+
+            params["filter"] = (
+                filter_metadata  # Pass the dictionary directly, not JSON-encoded
+            )
+
+        result = client.rpc("match_crawled_pages", params).execute()
+
+def extract_code_blocks(
+    markdown_content: str, min_length: int = 1000
+) -> List[Dict[str, Any]]:
 
 
-def llm_chat_completion(
-    messages: List[Dict[str, str]],
-    model: str,
-    temperature: float = 0.3,
-    max_tokens: int = 150,
+
+    if content.startswith("```"):
+
+        pos = markdown_content.find("```", pos)
+
+
+        code_section = markdown_content[start_pos + 3 : end_pos]
+
+        lines = code_section.split("\n", 1)
+            if first_line and not " " in first_line and len(first_line) < 20:
+
+
+
+        context_after = markdown_content[end_pos + 3 : context_end].strip()
+
+        code_blocks.append(
+            {
+                "code": code_content,
+                "language": language,
+                "context_before": context_before,
+                "context_after": context_after,
+                "full_context": f"{context_before}\n\n{code_content}\n\n{context_after}",
+            }
+        )
+
+
+def generate_code_example_summary(
+    code: str, context_before: str, context_after: str
 ) -> str:
-    """Call the configured LLM provider and return the response text."""
-    if LLM_PROVIDER in {"openai", "groq", "ollama", "lmstudio"}:
-        response = openai.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
+
+
+
+
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that provides concise code example summaries.",
+                },
+
+
+    batch_size: int = 20,
+    """
+
+
+            client.table("code_examples").delete().eq("url", url).execute()
+
+
+
+
+                print(
+                    f"Warning: Zero or invalid embedding detected, creating new one..."
+                )
+
+
+
+            batch_data.append(
+                {
+                    "url": urls[idx],
+                    "chunk_number": chunk_numbers[idx],
+                    "content": code_examples[idx],
+                    "summary": summaries[idx],
+                    "metadata": metadatas[idx],  # Store as JSON object, not string
+                    "source_id": source_id,
+                    "embedding": embedding,
+                }
+            )
+
+
+                client.table("code_examples").insert(batch_data).execute()
+                    print(
+                        f"Error inserting batch into Supabase (attempt {retry + 1}/{max_retries}): {e}"
+                    )
+                            client.table("code_examples").insert(record).execute()
+                            print(
+                                f"Failed to insert individual record for URL {record['url']}: {individual_error}"
+                            )
+
+                        print(
+                            f"Successfully inserted {successful_inserts}/{len(batch_data)} records individually"
+                        )
+        print(
+            f"Inserted batch {i//batch_size + 1} of {(total_items + batch_size - 1)//batch_size} code examples"
         )
-        return response.choices[0].message.content.strip()
-    if LLM_PROVIDER == "gemini":
-        if genai is None:
-            raise RuntimeError("google-generativeai is not installed")
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model_name = model if model else "gemini-1.5-flash"  # Use a more current default
-        # Convert messages to Gemini format
-        gemini_model = genai.GenerativeModel(model_name)
-        # Note: This simple implementation only uses the last message
-        # For full conversation support, you'd need to format the entire message history
-        result = gemini_model.generate_content(messages[-1]["content"])
-        return result.text.strip()
-    raise ValueError(f"Unsupported LLM_PROVIDER: {LLM_PROVIDER}")
 
-def generate_contextual_embedding(full_document: str, chunk: str) -> Tuple[str, bool]:
-    """
-    Generate contextual information for a chunk within a document to improve retrieval.
-    
-    Args:
-        full_document: The complete document text
-        chunk: The specific chunk of text to generate context for
-        
-    Returns:
-        Tuple containing:
-        - The contextual text that situates the chunk within the document
-        - Boolean indicating if contextual embedding was performed
-    """
-    model_choice = os.getenv("MODEL_CHOICE")
-    
-    try:
-        # Create the prompt for generating contextual information
-        prompt = f"""<document> 
-{full_document[:25000]} 
-</document>
-Here is the chunk we want to situate within the whole document 
-<chunk> 
-{chunk}
-</chunk> 
-Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else."""
-
-        # Call the configured LLM to generate contextual information
-        context = llm_chat_completion(
-            [
-                {"role": "system", "content": "You are a helpful assistant that provides concise contextual information."},
-                {"role": "user", "content": prompt},
-            ],
-            model=model_choice,
-            temperature=0.3,
-            max_tokens=200,
+        result = (
+            client.table("sources")
+            .update(
+                {
+                    "summary": summary,
+                    "total_word_count": word_count,
+                    "updated_at": "now()",
+                }
+            )
+            .eq("source_id", source_id)
+            .execute()
         )
-        
-        # Combine the context with the original chunk
-        contextual_text = f"{context}\n---\n{chunk}"
-        
-        return contextual_text, True
-    
-    except Exception as e:
-        print(f"Error generating contextual embedding: {e}. Using original chunk instead.")
-        return chunk, False
 
-def process_chunk_with_context(args):
-    """
-    Process a single chunk with contextual embedding.
-    This function is designed to be used with concurrent.futures.
-    
-    Args:
-        args: Tuple containing (url, content, full_document)
-        
-    Returns:
-        Tuple containing:
-        - The contextual text that situates the chunk within the document
-        - Boolean indicating if contextual embedding was performed
-    """
-    url, content, full_document = args
-    return generate_contextual_embedding(full_document, content)
+            client.table("sources").insert(
+                {
+                    "source_id": source_id,
+                    "summary": summary,
+                    "total_word_count": word_count,
+                }
+            ).execute()
 
-def add_documents_to_supabase(
-    client: Client, 
-    urls: List[str], 
-    chunk_numbers: List[int],
-    contents: List[str], 
-    metadatas: List[Dict[str, Any]],
-    url_to_full_document: Dict[str, str],
-    batch_size: int = 20
-) -> None:
+
+
+
     """
-    Add documents to the Supabase crawled_pages table in batches.
-    Deletes existing records with the same URLs before inserting to prevent duplicates.
-    
-    Args:
-        client: Supabase client
-        urls: List of URLs
-        chunk_numbers: List of chunk numbers
+
+
+
+
+
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that provides concise library/tool/framework summaries.",
+                },
+
+
+
+        print(
+            f"Error generating summary with LLM for {source_id}: {e}. Using default summary."
+        )
+    client: Client,
+    query: str,
+    match_count: int = 10,
+    source_id: Optional[str] = None,
+
+
+    enhanced_query = (
+        f"Code example for {query}\n\nSummary: Example code showing {query}"
+    )
+
+
+        params = {"query_embedding": query_embedding, "match_count": match_count}
+
+            params["filter"] = filter_metadata
+
+            params["source_filter"] = source_id
+
+        result = client.rpc("match_code_examples", params).execute()
+
+        return []
         contents: List of document contents
         metadatas: List of document metadata
         url_to_full_document: Dictionary mapping URLs to their full document content
