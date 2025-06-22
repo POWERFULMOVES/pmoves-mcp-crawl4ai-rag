@@ -137,10 +137,12 @@ def llm_chat_completion(
         if genai is None:
             raise RuntimeError("google-generativeai is not installed")
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model_name = model or "gemini-pro"
-        result = genai.GenerativeModel(model_name).generate_content(
-            messages[-1]["content"]
-        )
+        model_name = model if model else "gemini-1.5-flash"  # Use a more current default
+        # Convert messages to Gemini format
+        gemini_model = genai.GenerativeModel(model_name)
+        # Note: This simple implementation only uses the last message
+        # For full conversation support, you'd need to format the entire message history
+        result = gemini_model.generate_content(messages[-1]["content"])
         return result.text.strip()
     raise ValueError(f"Unsupported LLM_PROVIDER: {LLM_PROVIDER}")
 
